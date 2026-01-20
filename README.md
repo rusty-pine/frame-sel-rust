@@ -51,10 +51,4 @@ Contribution / workflow
 - Branch: `phase1/direct-transport`
 - Open PR with testing checklist and hardware details (M2, Xe3, QEMU, etc.)
 
-Security: rotate any leaked service keys now and store new keys as repo secrets.
 
-If you'd like I can:
-- (A) prepare a git patch you can apply here, or
-- (B) provide the exact git commands to create branch, add files, commit and open PR.
-
-Which do you prefer?
