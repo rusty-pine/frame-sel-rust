@@ -1,0 +1,65 @@
+# Cargo.toml
+#
+# Key fixes vs. previous revision:
+#
+#  • capnpc added to [build-dependencies].  The previous file used capnp
+#    (runtime crate) in build.rs — the code-generator crate is capnpc
+#    (issue #5 in Phase 1 review).
+#
+#  • siphasher removed.  It was listed but never used anywhere in the
+#    codebase.  Add it back when badge hashing is implemented (issue #20).
+#
+#  • kani removed from [dev-dependencies].  Kani is a model checker invoked
+#    as `cargo kani`; it is NOT a linkable library crate on crates.io.
+#    Listing it in dev-dependencies causes a crate-resolution failure.
+#    The #[cfg(kani)] gate in verification.rs works correctly without any
+#    Cargo.toml entry (issue #6 in Phase 1 review).
+#
+#  • thiserror added to [dependencies] to support the derive macros in
+#    error.rs.
+#
+#  • tokio feature set reduced to only what is actually used:
+#    "rt-multi-thread", "macros", "time".  "full" pulls in every tokio
+#    subsystem (fs, process, net, signal, sync, …), most of which are
+#    unnecessary in a seL4 userspace context.
+
+[package]
+name = "capability-marshaling"
+version = "0.1.0"
+edition = "2021"
+description = "Phase 1 seL4 + Cap'n Proto capability-marshaling bridge"
+license = "MIT"
+
+[dependencies]
+capnp       = "0.19"
+serde       = { version = "1.0", features = ["derive"] }
+serde_json  = "1.0"
+thiserror   = "1.0"
+reqwest     = { version = "0.12", features = ["json"] }
+tokio       = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+[build-dependencies]
+# capnpc provides CompilerCommand used in build.rs.
+# capnp (runtime) is a [dependencies] entry above.
+capnpc = "0.19"
+
+[dev-dependencies]
+criterion   = { version = "0.5", features = ["html_reports"] }
+tokio       = { version = "1",   features = ["rt-multi-thread", "macros", "time"] }
+
+[[bench]]
+name    = "latency_distribution"
+harness = false
+
+[lib]
+name = "capability_marshaling"
+path = "src/lib.rs"
+
+[[bin]]
+name = "phase1_benchmark"
+path = "src/main.rs"
+
+[features]
+# Enable for host testing without real seL4 syscalls.
+# Gates println!/eprintln! diagnostic output in bridge.rs and cap_management.rs.
+mock = []

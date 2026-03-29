@@ -1,0 +1,20 @@
+[package]
+name = "capability-marshaling-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+capnp = "0.19"
+capability-marshaling = { path = "..", features = ["mock"] }
+
+[[bin]]
+name = "fuzz_capnp_parse"
+path = "fuzz_targets/fuzz_capnp_parse.rs"
+test = false
+doc = false

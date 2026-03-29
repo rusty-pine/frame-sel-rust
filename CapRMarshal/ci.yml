@@ -1,0 +1,143 @@
+# .github/workflows/ci.yml
+#
+# Phase 1 CI pipeline.
+#
+# Jobs:
+#   build-and-test   — cargo build + test (mock feature, host target)
+#   kani             — formal verification with cargo kani
+#   fuzz             — cargo-fuzz for Cap'n Proto deserialisation
+#   bench            — criterion benchmarks (no seL4 required)
+#
+# Secrets required (set in GitHub Settings → Secrets → Actions):
+#   SUPABASE_URL     — project REST URL
+#   SUPABASE_KEY     — service role key (never the anon key)
+
+name: CI
+
+on:
+  push:
+    branches: ["main", "phase1/**"]
+  pull_request:
+    branches: ["main", "phase1/**"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ------------------------------------------------------------------
+  # 1. Build and test (host, mock feature)
+  # ------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test (mock)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install capnp compiler
+        run: sudo apt-get install -y capnproto
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build (mock feature)
+        run: cargo build --features mock
+
+      - name: Run tests (mock feature)
+        run: cargo test --features mock -- --include-ignored=false
+
+      - name: Run doc-tests
+        run: cargo test --doc --features mock
+
+  # ------------------------------------------------------------------
+  # 2. Kani formal verification
+  # ------------------------------------------------------------------
+  kani:
+    name: Kani Formal Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Kani
+        uses: model-checking/kani-github-action@v1
+
+      - name: Install capnp compiler
+        run: sudo apt-get install -y capnproto
+
+      - name: Verify depth limit
+        run: cargo kani --harness verify_depth_limit_enforced
+
+      - name: Verify derivation quota
+        run: cargo kani --harness verify_derivation_quota_enforced
+
+      - name: Verify derivation count bounded
+        run: cargo kani --harness verify_derivation_count_bounded
+
+      - name: Verify message too large rejected
+        run: cargo kani --harness verify_message_too_large_rejected
+
+      - name: Verify message parsing no panic
+        run: cargo kani --harness verify_message_parsing_no_panic
+
+  # ------------------------------------------------------------------
+  # 3. Fuzz testing (cargo-fuzz, 60 s per target in CI)
+  # ------------------------------------------------------------------
+  fuzz:
+    name: Fuzz Testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly (required by cargo-fuzz)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install capnp compiler
+        run: sudo apt-get install -y capnproto
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Fuzz Cap'n Proto deserialisation (60 s)
+        run: |
+          cargo fuzz run fuzz_capnp_parse -- -max_total_time=60
+        continue-on-error: true   # fuzz failures are reported as warnings in CI
+
+      - name: Upload fuzz corpus artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus
+          path: fuzz/corpus/
+
+  # ------------------------------------------------------------------
+  # 4. Criterion benchmarks (mock, no seL4 required)
+  # ------------------------------------------------------------------
+  bench:
+    name: Benchmarks (mock)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install capnp compiler
+        run: sudo apt-get install -y capnproto
+
+      - name: Run benchmarks (one iteration for CI smoke-check)
+        run: cargo bench --features mock -- --test
+
+      - name: Upload Criterion HTML reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-reports
+          path: target/criterion/
